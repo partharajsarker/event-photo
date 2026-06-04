@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  qrCodeUrl String?
+  createdAt DateTime @default(now())
+  photos    Photo[]
+
+  @@index([slug])
+}
+
+model Photo {
+  id            String     @id @default(cuid())
+  eventId       String
+  filename      String
+  thumbnail     String
+  originalUrl   String
+  uploadedAt    DateTime   @default(now())
+  downloadCount Int        @default(0)
+  event         Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  downloads     Download[]
+
+  @@index([eventId, uploadedAt(sort: Desc)])
+}
+
+model Download {
+  id           String   @id @default(cuid())
+  photoId      String
+  ipAddress    String
+  downloadedAt DateTime @default(now())
+  photo        Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@index([photoId, downloadedAt(sort: Desc)])
+}
