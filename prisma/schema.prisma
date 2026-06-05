@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Event {
@@ -16,20 +17,23 @@ model Event {
   photos    Photo[]
 
   @@index([slug])
+  @@index([createdAt])
 }
 
 model Photo {
   id            String     @id @default(cuid())
   eventId       String
   filename      String
-  thumbnail     String
+  thumbnail     String?
   originalUrl   String
   uploadedAt    DateTime   @default(now())
   downloadCount Int        @default(0)
+  status        String     @default("processing") // processing | ready | failed
   event         Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
   downloads     Download[]
 
   @@index([eventId, uploadedAt(sort: Desc)])
+  @@index([status])
 }
 
 model Download {

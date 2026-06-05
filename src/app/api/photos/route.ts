@@ -28,14 +28,18 @@ export async function GET(request: NextRequest) {
       return jsonError("Event not found", 404);
     }
 
+    // Cursor-based pagination
     const photos = await prisma.photo.findMany({
-      where: { eventId: event.id },
+      where: {
+        eventId: event.id,
+        status: "ready", // Only return processed photos
+      },
       orderBy: { uploadedAt: "desc" },
-      take: limit + 1,
+      take: limit + 1, // Fetch one extra to determine hasMore
       ...(cursor
         ? {
             cursor: { id: cursor },
-            skip: 1,
+            skip: 1, // Skip the cursor item
           }
         : {}),
     });
@@ -51,8 +55,9 @@ export async function GET(request: NextRequest) {
         originalUrl: p.originalUrl,
         uploadedAt: p.uploadedAt.toISOString(),
         downloadCount: p.downloadCount,
+        status: p.status,
       })),
-      nextCursor: hasMore ? items[items.length - 1]?.id ?? null : null,
+      nextCursor: hasMore ? (items[items.length - 1]?.id ?? null) : null,
       hasMore,
     };
 

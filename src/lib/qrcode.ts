@@ -1,9 +1,9 @@
 import QRCode from "qrcode";
-import { uploadToStorage, buildStorageKey } from "./storage";
+import { uploadToR2, buildStorageKey } from "./r2";
 
 export async function generateAndStoreQrCode(
   eventSlug: string,
-  publicUrl: string
+  publicUrl: string,
 ): Promise<string> {
   const qrBuffer = await QRCode.toBuffer(publicUrl, {
     type: "png",
@@ -17,7 +17,7 @@ export async function generateAndStoreQrCode(
   });
 
   const key = buildStorageKey(eventSlug, "qr", "qr-code.png");
-  return uploadToStorage(key, qrBuffer, "image/png");
+  return uploadToR2(key, qrBuffer, "image/png");
 }
 
 export function getEventPublicUrl(slug: string): string {

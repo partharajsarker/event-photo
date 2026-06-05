@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit, jsonError } from "@/lib/api-utils";
-import { verifyAdminKey } from "@/lib/security";
-import { deleteFromStorage, extractKeyFromUrl } from "@/lib/storage";
+import { withRateLimitAndAuth, jsonError } from "@/lib/api-utils";
+import { deleteFromR2, extractKeyFromUrl } from "@/lib/r2";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
-  return withRateLimit(request, async () => {
-    if (!verifyAdminKey(request)) {
-      return jsonError("Unauthorized", 401);
-    }
-
+  return withRateLimitAndAuth(request, async () => {
     const { id } = await context.params;
 
     const photo = await prisma.photo.findUnique({ where: { id } });
@@ -22,15 +17,17 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return jsonError("Photo not found", 404);
     }
 
+    // Delete from database first
     await prisma.photo.delete({ where: { id } });
 
+    // Then delete from R2
     await Promise.allSettled(
-      [photo.originalUrl, photo.thumbnail].map(async (url) => {
-        const key = extractKeyFromUrl(url);
+      [photo.originalUrl, photo.thumbnail].filter(Boolean).map(async (url) => {
+        const key = extractKeyFromUrl(url!);
         if (key) {
-          await deleteFromStorage(key);
+          await deleteFromR2(key);
         }
-      })
+      }),
     );
 
     return NextResponse.json({ success: true });

@@ -46,7 +46,7 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
 
         const data = await res.json();
         setPhotos((prev) =>
-          nextCursor ? [...prev, ...data.photos] : data.photos
+          nextCursor ? [...prev, ...data.photos] : data.photos,
         );
         setCursor(data.nextCursor);
         setHasMore(data.hasMore);
@@ -58,7 +58,7 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
         setInitialLoading(false);
       }
     },
-    [eventSlug]
+    [eventSlug],
   );
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
           fetchPhotos(cursor);
         }
       },
-      { rootMargin: "200px" }
+      { rootMargin: "200px" },
     );
 
     const node = loadMoreRef.current;
@@ -145,14 +145,20 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
             onClick={() => setSelectedIndex(index)}
             className="group relative aspect-square overflow-hidden rounded-lg bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <Image
-              src={photo.thumbnail}
-              alt={`Photo ${index + 1}`}
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
-              loading="lazy"
-            />
+            {photo.thumbnail ? (
+              <Image
+                src={photo.thumbnail}
+                alt={`Photo ${index + 1}`}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center bg-zinc-800">
+                <span className="text-xs text-zinc-500">Loading...</span>
+              </div>
+            )}
           </button>
         ))}
       </div>

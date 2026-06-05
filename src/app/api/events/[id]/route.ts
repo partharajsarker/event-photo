@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit, jsonError } from "@/lib/api-utils";
-import { verifyAdminKey } from "@/lib/security";
-import {
-  deleteFromStorage,
-  extractKeyFromUrl,
-} from "@/lib/storage";
+import { withRateLimitAndAuth, jsonError } from "@/lib/api-utils";
+import { deleteFromR2, extractKeyFromUrl } from "@/lib/r2";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  return withRateLimit(request, async () => {
-    if (!verifyAdminKey(request)) {
-      return jsonError("Unauthorized", 401);
-    }
-
+  return withRateLimitAndAuth(request, async () => {
     const { id } = await context.params;
 
     const event = await prisma.event.findUnique({
@@ -33,7 +25,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return jsonError("Event not found", 404);
     }
 
-    const totalDownloads = event.photos.reduce((sum, p) => sum + p.downloadCount, 0);
+    const totalDownloads = event.photos.reduce(
+      (sum, p) => sum + p.downloadCount,
+      0,
+    );
 
     return NextResponse.json({
       event: {
@@ -51,6 +46,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           originalUrl: p.originalUrl,
           uploadedAt: p.uploadedAt.toISOString(),
           downloadCount: p.downloadCount,
+          status: p.status,
         })),
       },
     });
@@ -58,11 +54,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
-  return withRateLimit(request, async () => {
-    if (!verifyAdminKey(request)) {
-      return jsonError("Unauthorized", 401);
-    }
-
+  return withRateLimitAndAuth(request, async () => {
     const { id } = await context.params;
 
     const event = await prisma.event.findUnique({
@@ -79,15 +71,17 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       ...event.photos.flatMap((p) => [p.originalUrl, p.thumbnail]),
     ].filter(Boolean) as string[];
 
+    // Delete from database first
     await prisma.event.delete({ where: { id } });
 
+    // Then delete from R2
     await Promise.allSettled(
       urlsToDelete.map(async (url) => {
         const key = extractKeyFromUrl(url);
         if (key) {
-          await deleteFromStorage(key);
+          await deleteFromR2(key);
         }
-      })
+      }),
     );
 
     return NextResponse.json({ success: true });

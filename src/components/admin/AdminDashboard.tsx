@@ -2,17 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
+import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import type { EventWithStats, PhotoItem } from "@/types";
-
-const ADMIN_KEY_STORAGE = "event-photos-admin-key";
 
 type EventDetail = EventWithStats & {
   photos: PhotoItem[];
 };
 
 export function AdminDashboard() {
-  const [adminKey, setAdminKey] = useState("");
-  const [authenticated, setAuthenticated] = useState(false);
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [events, setEvents] = useState<EventWithStats[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null);
   const [newEventName, setNewEventName] = useState("");
@@ -21,12 +21,10 @@ export function AdminDashboard() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(ADMIN_KEY_STORAGE);
-    if (stored) {
-      setAdminKey(stored);
-      setAuthenticated(true);
+    if (status === "unauthenticated") {
+      router.push("/admin/login");
     }
-  }, []);
+  }, [status, router]);
 
   const apiFetch = useCallback(
     async (url: string, options: RequestInit = {}) => {
@@ -34,15 +32,13 @@ export function AdminDashboard() {
         ...options,
         headers: {
           "Content-Type": "application/json",
-          "X-Admin-Key": adminKey,
           ...options.headers,
         },
       });
 
       if (res.status === 401) {
-        setAuthenticated(false);
-        localStorage.removeItem(ADMIN_KEY_STORAGE);
-        throw new Error("Invalid admin key");
+        router.push("/admin/login");
+        throw new Error("Unauthorized");
       }
 
       if (!res.ok) {
@@ -52,7 +48,7 @@ export function AdminDashboard() {
 
       return res.json();
     },
-    [adminKey]
+    [router],
   );
 
   const loadEvents = useCallback(async () => {
@@ -69,16 +65,14 @@ export function AdminDashboard() {
   }, [apiFetch]);
 
   useEffect(() => {
-    if (authenticated && adminKey) {
+    if (status === "authenticated") {
       loadEvents();
     }
-  }, [authenticated, adminKey, loadEvents]);
+  }, [status, loadEvents]);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!adminKey.trim()) return;
-    localStorage.setItem(ADMIN_KEY_STORAGE, adminKey);
-    setAuthenticated(true);
+  const handleSignOut = async () => {
+    await signOut({ redirect: false });
+    router.push("/admin/login");
   };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
@@ -152,53 +146,36 @@ export function AdminDashboard() {
     }
   };
 
-  const publicUrl = (slug: string) =>
-    `${window.location.origin}/event/${slug}`;
+  const publicUrl = (slug: string) => `${window.location.origin}/event/${slug}`;
 
-  if (!authenticated) {
+  if (status === "loading") {
     return (
-      <div className="mx-auto max-w-md">
-        <h1 className="mb-6 text-2xl font-semibold">Admin Login</h1>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label htmlFor="adminKey" className="mb-1 block text-sm text-zinc-400">
-              Admin API Key
-            </label>
-            <input
-              id="adminKey"
-              type="password"
-              value={adminKey}
-              onChange={(e) => setAdminKey(e.target.value)}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white focus:border-indigo-500 focus:outline-none"
-              placeholder="Enter admin key"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-indigo-600 py-2 font-medium text-white hover:bg-indigo-500"
-          >
-            Continue
-          </button>
-        </form>
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-600 border-t-indigo-500" />
       </div>
     );
+  }
+
+  if (status === "unauthenticated") {
+    return null;
   }
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-        <button
-          type="button"
-          onClick={() => {
-            localStorage.removeItem(ADMIN_KEY_STORAGE);
-            setAuthenticated(false);
-            setAdminKey("");
-          }}
-          className="text-sm text-zinc-400 hover:text-zinc-200"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-zinc-400">
+            {session?.user?.name ?? "Admin"}
+          </span>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="text-sm text-zinc-400 hover:text-zinc-200"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -214,7 +191,10 @@ export function AdminDashboard() {
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
         <h2 className="mb-4 text-lg font-medium">Create Event</h2>
-        <form onSubmit={handleCreateEvent} className="flex flex-col gap-3 sm:flex-row">
+        <form
+          onSubmit={handleCreateEvent}
+          className="flex flex-col gap-3 sm:flex-row"
+        >
           <input
             type="text"
             value={newEventName}
@@ -288,7 +268,8 @@ export function AdminDashboard() {
             <div>
               <h2 className="text-lg font-medium">{selectedEvent.name}</h2>
               <p className="text-sm text-zinc-500">
-                {selectedEvent.photoCount} photos · {selectedEvent.totalDownloads} total downloads
+                {selectedEvent.photoCount} photos ·{" "}
+                {selectedEvent.totalDownloads} total downloads
               </p>
               <a
                 href={publicUrl(selectedEvent.slug)}
@@ -352,13 +333,21 @@ export function AdminDashboard() {
               {selectedEvent.photos.map((photo) => (
                 <div key={photo.id} className="group relative">
                   <div className="relative aspect-square overflow-hidden rounded-lg bg-zinc-800">
-                    <Image
-                      src={photo.thumbnail}
-                      alt={photo.filename}
-                      fill
-                      className="object-cover"
-                      sizes="150px"
-                    />
+                    {photo.thumbnail ? (
+                      <Image
+                        src={photo.thumbnail}
+                        alt={photo.filename}
+                        fill
+                        className="object-cover"
+                        sizes="150px"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-zinc-500">
+                        {photo.status === "processing"
+                          ? "Processing..."
+                          : "No preview"}
+                      </div>
+                    )}
                   </div>
                   <p className="mt-1 truncate text-xs text-zinc-500">
                     ↓ {photo.downloadCount}
@@ -376,13 +365,16 @@ export function AdminDashboard() {
           )}
 
           <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
-            <h4 className="mb-2 text-sm font-medium text-zinc-300">Camera Upload URL</h4>
+            <h4 className="mb-2 text-sm font-medium text-zinc-300">
+              Camera Upload URL
+            </h4>
             <code className="block break-all text-xs text-zinc-400">
-              POST {window.location.origin}/api/upload?eventSlug={selectedEvent.slug}
+              POST {window.location.origin}/api/upload?eventSlug=
+              {selectedEvent.slug}
             </code>
             <p className="mt-2 text-xs text-zinc-500">
-              Configure your camera for HTTP POST or FTP-to-HTTP bridge. Send multipart form with
-              &quot;file&quot; field or raw image bytes.
+              Configure your camera for HTTP POST or use the presigned URL
+              endpoint for large files.
             </p>
           </div>
         </section>

@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit, jsonError } from "@/lib/api-utils";
+import { withRateLimitAndAuth, jsonError } from "@/lib/api-utils";
 import { createEventSchema } from "@/lib/validation";
-import { verifyAdminKey } from "@/lib/security";
 import { generateSlug, ensureUniqueSlug } from "@/lib/slug";
 import { generateAndStoreQrCode, getEventPublicUrl } from "@/lib/qrcode";
+import { sanitizeString } from "@/lib/security";
 import type { EventWithStats } from "@/types";
 
 export async function GET(request: NextRequest) {
-  return withRateLimit(request, async () => {
-    if (!verifyAdminKey(request)) {
-      return jsonError("Unauthorized", 401);
-    }
-
+  return withRateLimitAndAuth(request, async () => {
     const events = await prisma.event.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -38,11 +34,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  return withRateLimit(request, async () => {
-    if (!verifyAdminKey(request)) {
-      return jsonError("Unauthorized", 401);
-    }
-
+  return withRateLimitAndAuth(request, async () => {
     try {
       const body = await request.json();
       const parsed = createEventSchema.safeParse(body);
@@ -51,7 +43,13 @@ export async function POST(request: NextRequest) {
         return jsonError("Validation failed", 400, parsed.error.flatten());
       }
 
-      const baseSlug = generateSlug(parsed.data.name);
+      // Sanitize event name
+      const sanitizedName = sanitizeString(parsed.data.name);
+      if (!sanitizedName) {
+        return jsonError("Invalid event name", 400);
+      }
+
+      const baseSlug = generateSlug(sanitizedName);
       if (!baseSlug) {
         return jsonError("Could not generate slug from event name", 400);
       }
@@ -61,7 +59,7 @@ export async function POST(request: NextRequest) {
 
       const event = await prisma.event.create({
         data: {
-          name: parsed.data.name,
+          name: sanitizedName,
           slug,
         },
       });
@@ -84,7 +82,7 @@ export async function POST(request: NextRequest) {
             createdAt: updated.createdAt.toISOString(),
           },
         },
-        { status: 201 }
+        { status: 201 },
       );
     } catch (error) {
       console.error("Create event error:", error);

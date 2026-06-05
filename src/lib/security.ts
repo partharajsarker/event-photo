@@ -1,12 +1,8 @@
-import path from "path";
 import { v4 as uuidv4 } from "uuid";
+import xss from "xss";
 
 const ALLOWED_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
-const ALLOWED_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
+const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -20,7 +16,9 @@ export function getMaxUploadBytes(): number {
 }
 
 export function sanitizeFilename(originalName: string): string {
-  const basename = path.basename(originalName);
+  // Remove path components
+  const basename = originalName.split(/[\\/]/).pop() ?? originalName;
+  // Remove dangerous characters and limit length
   const sanitized = basename
     .replace(/[^a-zA-Z0-9._-]/g, "_")
     .replace(/\.{2,}/g, ".")
@@ -53,23 +51,37 @@ export function generateSecureFilename(mimeType: string): string {
 }
 
 export function preventPathTraversal(input: string): string {
-  const normalized = path.normalize(input).replace(/^(\.\.(\/|\\|$))+/, "");
-  return normalized.replace(/\\/g, "/");
+  // Remove any path traversal attempts
+  return input
+    .replace(/\.\./g, "")
+    .replace(/[\\/]/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/^\/+/, "");
 }
 
-export function verifyAdminKey(request: Request): boolean {
-  const adminKey = process.env.ADMIN_API_KEY;
-  if (!adminKey) {
-    return false;
-  }
-  const provided = request.headers.get("x-admin-key");
-  return provided === adminKey;
+export function sanitizeString(input: string, maxLength: number = 200): string {
+  // Use xss library to sanitize HTML/script tags
+  const cleaned = xss(input, {
+    whiteList: {},
+    stripIgnoreTag: true,
+    stripIgnoreTagBody: ["script", "style"],
+  });
+  // Remove control characters and limit length
+  return cleaned
+    .replace(/[\x00-\x1F\x7F]/g, "")
+    .trim()
+    .slice(0, maxLength);
 }
 
 export function getClientIp(request: Request): string {
+  // Vercel-specific headers
+  const vercelIp = request.headers.get("x-real-ip");
+  if (vercelIp) return vercelIp;
+
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
     return forwarded.split(",")[0]?.trim() ?? "unknown";
   }
-  return request.headers.get("x-real-ip") ?? "unknown";
+
+  return "unknown";
 }
