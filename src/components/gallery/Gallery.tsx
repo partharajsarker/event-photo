@@ -9,7 +9,7 @@ type GalleryProps = {
   eventSlug: string;
   eventName: string;
 };
-
+// change to main
 export function Gallery({ eventSlug, eventName }: GalleryProps) {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -182,23 +182,41 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
   return (
     <>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 lg:gap-3">
-        {photos.map((photo, index) => (
-          <button
-            key={photo.id}
-            type="button"
-            onClick={() => setSelectedIndex(index)}
-            className="group relative aspect-square overflow-hidden rounded-lg bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <Image
-              src={photo.thumbnail || photo.originalUrl}
-              alt={`Photo ${index + 1}`}
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
-              loading="lazy"
-            />
-          </button>
-        ))}
+        {photos.map((photo, index) => {
+          const imageUrl = photo.thumbnail || photo.originalUrl;
+          console.log("[Gallery] Rendering photo:", {
+            index,
+            photoId: photo.id,
+            hasThumbnail: !!photo.thumbnail,
+            thumbnail: photo.thumbnail,
+            originalUrl: photo.originalUrl,
+            imageUrl,
+          });
+          return (
+            <button
+              key={photo.id}
+              type="button"
+              onClick={() => setSelectedIndex(index)}
+              className="group relative aspect-square overflow-hidden rounded-lg bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <Image
+                src={imageUrl}
+                alt={`Photo ${index + 1}`}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+                onError={(e) => {
+                  console.error("[Gallery] Image failed to load:", {
+                    photoId: photo.id,
+                    imageUrl,
+                    error: e,
+                  });
+                }}
+              />
+            </button>
+          );
+        })}
       </div>
 
       {hasMore && (

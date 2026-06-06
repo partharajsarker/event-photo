@@ -35,11 +35,18 @@ export function isStorageConfigured(): boolean {
  */
 export function getPublicUrl(path: string): string | null {
   if (!isStorageConfigured()) {
+    console.warn("[Storage] Cannot get public URL - storage not configured");
     return null;
   }
 
   const { data } = getClient().storage.from(SUPABASE_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  const publicUrl = data.publicUrl;
+  console.log("[Storage] Generated public URL:", {
+    path,
+    bucket: SUPABASE_BUCKET,
+    publicUrl,
+  });
+  return publicUrl;
 }
 
 /**
