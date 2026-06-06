@@ -1,6 +1,11 @@
 import sharp from "sharp";
 import { prisma } from "./prisma";
-import { getFromR2, uploadToR2, extractKeyFromUrl, isR2Configured } from "./r2";
+import {
+  getFromStorage,
+  uploadToStorage,
+  extractPathFromUrl,
+  isStorageConfigured,
+} from "./storage";
 
 const THUMBNAIL_WIDTH = 400;
 
@@ -35,21 +40,16 @@ export async function validateImageBuffer(buffer: Buffer): Promise<{
 
 /**
  * Background thumbnail generation for a photo.
- * This can be called asynchronously after the original is uploaded.
- * Downloads original from R2, generates thumbnail, uploads to R2, updates DB.
- * Skips processing if R2 is not configured.
+ * Downloads original from storage, generates thumbnail, uploads to storage, updates DB.
+ * Skips processing if storage is not configured.
  */
 export async function processThumbnail(
   photoId: string,
   originalUrl: string,
-  thumbnailKey: string,
+  thumbnailPath: string,
 ): Promise<void> {
-  if (!isR2Configured()) {
-    console.warn(
-      "[Thumbnail] R2 not configured, skipping thumbnail processing for:",
-      photoId,
-    );
-    // Mark as ready even without thumbnail (gallery will show placeholder)
+  if (!isStorageConfigured()) {
+    console.warn("[Thumbnail] Storage not configured, skipping for:", photoId);
     await prisma.photo
       .update({
         where: { id: photoId },
@@ -60,14 +60,14 @@ export async function processThumbnail(
   }
 
   try {
-    // Extract key from original URL to download from R2
-    const originalKey = extractKeyFromUrl(originalUrl);
-    if (!originalKey) {
-      throw new Error("Could not extract key from original URL");
+    // Extract path from original URL to download from storage
+    const originalPath = extractPathFromUrl(originalUrl);
+    if (!originalPath) {
+      throw new Error("Could not extract path from original URL");
     }
 
-    // Download original from R2
-    const originalBuffer = await getFromR2(originalKey);
+    // Download original from storage
+    const originalBuffer = await getFromStorage(originalPath);
     if (!originalBuffer) {
       throw new Error("Failed to retrieve original image from storage");
     }
@@ -75,9 +75,9 @@ export async function processThumbnail(
     // Generate thumbnail
     const thumbnailBuffer = await generateThumbnail(originalBuffer);
 
-    // Upload thumbnail to R2
-    const thumbnailUrl = await uploadToR2(
-      thumbnailKey,
+    // Upload thumbnail to storage
+    const thumbnailUrl = await uploadToStorage(
+      thumbnailPath,
       thumbnailBuffer,
       "image/jpeg",
     );

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withRateLimitAndAuth, jsonError } from "@/lib/api-utils";
-import { deleteFromR2, extractKeyFromUrl } from "@/lib/r2";
+import { deleteFromStorage, extractPathFromUrl } from "@/lib/storage";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -74,12 +74,12 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Delete from database first
     await prisma.event.delete({ where: { id } });
 
-    // Then delete from R2
+    // Then delete from storage
     await Promise.allSettled(
       urlsToDelete.map(async (url) => {
-        const key = extractKeyFromUrl(url);
-        if (key) {
-          await deleteFromR2(key);
+        const path = extractPathFromUrl(url);
+        if (path) {
+          await deleteFromStorage(path);
         }
       }),
     );

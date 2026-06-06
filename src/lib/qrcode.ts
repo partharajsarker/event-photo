@@ -1,17 +1,21 @@
 import QRCode from "qrcode";
-import { uploadToR2, buildStorageKey, isR2Configured } from "./r2";
+import {
+  uploadToStorage,
+  buildStoragePath,
+  isStorageConfigured,
+} from "./storage";
 
 /**
  * Generate and store QR code image.
- * Returns null if R2 is not configured.
+ * Returns null if storage is not configured.
  */
 export async function generateAndStoreQrCode(
   eventSlug: string,
   publicUrl: string,
 ): Promise<string | null> {
-  if (!isR2Configured()) {
+  if (!isStorageConfigured()) {
     console.warn(
-      "[QR] R2 not configured, skipping QR code generation for event:",
+      "[QR] Storage not configured, skipping QR code generation for event:",
       eventSlug,
     );
     return null;
@@ -28,8 +32,8 @@ export async function generateAndStoreQrCode(
     errorCorrectionLevel: "M",
   });
 
-  const key = buildStorageKey(eventSlug, "qr", "qr-code.png");
-  return uploadToR2(key, qrBuffer, "image/png");
+  const path = buildStoragePath(eventSlug, "qr", "qr-code.png");
+  return uploadToStorage(path, qrBuffer, "image/png");
 }
 
 export function getEventPublicUrl(slug: string): string {

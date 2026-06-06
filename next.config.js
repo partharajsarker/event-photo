@@ -2,17 +2,13 @@
 const nextConfig = {
   images: {
     remotePatterns: [
-      // Cloudflare R2 custom domain
+      // Supabase Storage
       {
         protocol: "https",
-        hostname:
-          process.env.R2_PUBLIC_URL?.replace(/^https?:\/\//, "").replace(
-            /\/$/,
-            "",
-          ) || "**.r2.dev",
-        pathname: "/**",
+        hostname: "**.supabase.co",
+        pathname: "/storage/**",
       },
-      // Any HTTPS source (fallback for R2 public URLs)
+      // Any HTTPS source (fallback)
       {
         protocol: "https",
         hostname: "**",
@@ -21,14 +17,14 @@ const nextConfig = {
       {
         protocol: "http",
         hostname: "localhost",
-        port: "9000",
+        port: "**",
         pathname: "/**",
       },
     ],
     // Use Vercel Image Optimization
     unoptimized: false,
   },
-  // Increase body size limit for uploads (when not using presigned URLs)
+  // Increase body size limit for uploads
   experimental: {
     serverActions: {
       bodySizeLimit: "50mb",
