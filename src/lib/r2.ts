@@ -1,4 +1,9 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
@@ -6,6 +11,18 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET = process.env.R2_BUCKET ?? "event-photos";
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL;
+
+/**
+ * Check if R2 is fully configured
+ */
+export function isR2Configured(): boolean {
+  return !!(
+    R2_ACCOUNT_ID &&
+    R2_ACCESS_KEY_ID &&
+    R2_SECRET_ACCESS_KEY &&
+    R2_PUBLIC_URL
+  );
+}
 
 function getClient(): S3Client {
   if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
@@ -31,9 +48,9 @@ function s3(): S3Client {
   return client;
 }
 
-export function getPublicUrl(key: string): string {
+export function getPublicUrl(key: string): string | null {
   if (!R2_PUBLIC_URL) {
-    throw new Error("R2_PUBLIC_URL is not configured");
+    return null;
   }
   const base = R2_PUBLIC_URL.replace(/\/$/, "");
   return `${base}/${key}`;
@@ -42,8 +59,13 @@ export function getPublicUrl(key: string): string {
 export async function uploadToR2(
   key: string,
   body: Buffer,
-  contentType: string
-): Promise<string> {
+  contentType: string,
+): Promise<string | null> {
+  if (!isR2Configured()) {
+    console.warn("[R2] Storage not configured, skipping upload for:", key);
+    return null;
+  }
+
   await s3().send(
     new PutObjectCommand({
       Bucket: R2_BUCKET,
@@ -51,27 +73,37 @@ export async function uploadToR2(
       Body: body,
       ContentType: contentType,
       CacheControl: "public, max-age=31536000, immutable",
-    })
+    }),
   );
 
   return getPublicUrl(key);
 }
 
 export async function deleteFromR2(key: string): Promise<void> {
+  if (!isR2Configured()) {
+    console.warn("[R2] Storage not configured, skipping delete for:", key);
+    return;
+  }
+
   await s3().send(
     new DeleteObjectCommand({
       Bucket: R2_BUCKET,
       Key: key,
-    })
+    }),
   );
 }
 
-export async function getFromR2(key: string): Promise<Buffer> {
+export async function getFromR2(key: string): Promise<Buffer | null> {
+  if (!isR2Configured()) {
+    console.warn("[R2] Storage not configured, skipping fetch for:", key);
+    return null;
+  }
+
   const response = await s3().send(
     new GetObjectCommand({
       Bucket: R2_BUCKET,
       Key: key,
-    })
+    }),
   );
 
   if (!response.Body) {
@@ -88,8 +120,13 @@ export async function getFromR2(key: string): Promise<Buffer> {
 export async function generatePresignedUploadUrl(
   key: string,
   contentType: string,
-  expiresInSeconds: number = 3600
-): Promise<string> {
+  expiresInSeconds: number = 3600,
+): Promise<string | null> {
+  if (!isR2Configured()) {
+    console.warn("[R2] Storage not configured, cannot generate presigned URL");
+    return null;
+  }
+
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET,
     Key: key,
@@ -112,7 +149,7 @@ export function extractKeyFromUrl(url: string): string | null {
 export function buildStorageKey(
   eventSlug: string,
   type: "original" | "thumbnail" | "qr",
-  filename: string
+  filename: string,
 ): string {
   return `events/${eventSlug}/${type}/${filename}`;
 }

@@ -22,6 +22,7 @@ import {
   buildStorageKey,
   getPublicUrl,
   generatePresignedUploadUrl,
+  isR2Configured,
 } from "@/lib/r2";
 import { processThumbnail, validateImageBuffer } from "@/lib/thumbnail";
 
@@ -34,6 +35,13 @@ export const maxDuration = 60;
  */
 export async function GET(request: NextRequest) {
   return withRateLimitAndAuth(request, async () => {
+    if (!isR2Configured()) {
+      return jsonError(
+        "Storage not configured. Set R2 environment variables.",
+        503,
+      );
+    }
+
     try {
       const { searchParams } = new URL(request.url);
       const parsed = presignedUrlSchema.safeParse({
@@ -60,13 +68,18 @@ export async function GET(request: NextRequest) {
       // Generate secure filename and storage key
       const secureFilename = generateSecureFilename(contentType);
       const originalKey = buildStorageKey(safeSlug, "original", secureFilename);
+      const publicUrl = getPublicUrl(originalKey);
+
+      if (!publicUrl) {
+        return jsonError("Storage not properly configured", 503);
+      }
 
       // Create photo record in "processing" state
       const photo = await prisma.photo.create({
         data: {
           eventId: event.id,
           filename: filename || secureFilename,
-          originalUrl: getPublicUrl(originalKey),
+          originalUrl: publicUrl,
           status: "processing",
         },
       });
@@ -78,6 +91,10 @@ export async function GET(request: NextRequest) {
         3600,
       );
 
+      if (!uploadUrl) {
+        return jsonError("Failed to generate upload URL", 503);
+      }
+
       const thumbnailKey = buildStorageKey(
         safeSlug,
         "thumbnail",
@@ -88,7 +105,7 @@ export async function GET(request: NextRequest) {
         uploadUrl,
         photoId: photo.id,
         key: originalKey,
-        publicUrl: getPublicUrl(originalKey),
+        publicUrl,
         thumbnailKey,
       });
     } catch (error) {
@@ -105,6 +122,13 @@ export async function POST(request: NextRequest) {
   return withRateLimit(
     request,
     async () => {
+      if (!isR2Configured()) {
+        return jsonError(
+          "Storage not configured. Set R2 environment variables.",
+          503,
+        );
+      }
+
       try {
         const contentType = request.headers.get("content-type") ?? "";
 
@@ -289,6 +313,10 @@ async function handleDirectUpload(request: NextRequest): Promise<NextResponse> {
 
   // Upload original to R2
   const originalUrl = await uploadToR2(originalKey, imageBuffer, mimeType);
+
+  if (!originalUrl) {
+    return jsonError("Failed to upload file to storage", 503);
+  }
 
   // Create photo record
   const photo = await prisma.photo.create({

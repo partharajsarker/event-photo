@@ -9,4 +9,5 @@ export {
   buildStorageKey,
   getFromR2 as getFromStorage,
   generatePresignedUploadUrl,
+  isR2Configured,
 } from "./r2";

@@ -1,10 +1,22 @@
 import QRCode from "qrcode";
-import { uploadToR2, buildStorageKey } from "./r2";
+import { uploadToR2, buildStorageKey, isR2Configured } from "./r2";
 
+/**
+ * Generate and store QR code image.
+ * Returns null if R2 is not configured.
+ */
 export async function generateAndStoreQrCode(
   eventSlug: string,
   publicUrl: string,
-): Promise<string> {
+): Promise<string | null> {
+  if (!isR2Configured()) {
+    console.warn(
+      "[QR] R2 not configured, skipping QR code generation for event:",
+      eventSlug,
+    );
+    return null;
+  }
+
   const qrBuffer = await QRCode.toBuffer(publicUrl, {
     type: "png",
     width: 512,
