@@ -452,21 +452,13 @@ export function AdminDashboard() {
               {selectedEvent.photos.map((photo) => (
                 <div key={photo.id} className="group relative">
                   <div className="relative aspect-square overflow-hidden rounded-lg bg-zinc-800">
-                    {photo.thumbnail ? (
-                      <Image
-                        src={photo.thumbnail}
-                        alt={photo.filename}
-                        fill
-                        className="object-cover"
-                        sizes="150px"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-xs text-zinc-500">
-                        {photo.status === "processing"
-                          ? "Processing..."
-                          : "No preview"}
-                      </div>
-                    )}
+                    <Image
+                      src={photo.thumbnail || photo.originalUrl}
+                      alt={photo.filename}
+                      fill
+                      className="object-cover"
+                      sizes="150px"
+                    />
                   </div>
                   <p className="mt-1 truncate text-xs text-zinc-500">
                     ↓ {photo.downloadCount}

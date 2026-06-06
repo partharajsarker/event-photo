@@ -29,10 +29,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Cursor-based pagination
+    // Include both "processing" and "ready" photos so users see uploads immediately
     const photos = await prisma.photo.findMany({
       where: {
         eventId: event.id,
-        status: "ready", // Only return processed photos
+        status: { in: ["ready", "processing"] }, // Show photos while they're being processed
       },
       orderBy: { uploadedAt: "desc" },
       take: limit + 1, // Fetch one extra to determine hasMore

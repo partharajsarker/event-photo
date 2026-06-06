@@ -214,29 +214,34 @@ export async function POST(request: NextRequest) {
         console.log("[Upload] Step 6: Creating Photo record:", {
           eventId: event.id,
           filename: secureFilename,
+          originalUrl,
         });
+
+        const photoData = {
+          eventId: event.id,
+          filename: secureFilename,
+          originalUrl,
+          status: "processing" as const,
+        };
+
+        console.log("[Upload] Step 6a: Photo data to insert:", photoData);
 
         let photo;
         try {
           photo = await prisma.photo.create({
-            data: {
-              eventId: event.id,
-              filename: secureFilename,
-              originalUrl,
-              status: "processing",
-            },
+            data: photoData,
           });
           console.log("[Upload] Step 7: Photo record created:", {
             photoId: photo.id,
             eventId: photo.eventId,
+            filename: photo.filename,
+            originalUrl: photo.originalUrl,
           });
         } catch (dbError) {
           console.error("[Upload] Database error creating photo:", {
             error: dbError instanceof Error ? dbError.message : String(dbError),
             stack: dbError instanceof Error ? dbError.stack : undefined,
-            eventId: event.id,
-            filename: secureFilename,
-            originalUrl,
+            input: photoData,
           });
 
           // Attempt to delete the uploaded file since DB write failed
@@ -248,6 +253,29 @@ export async function POST(request: NextRequest) {
             `Database error: ${dbError instanceof Error ? dbError.message : "Unknown error"}`,
             500,
           );
+        }
+
+        // Verify the photo was actually saved
+        console.log("[Upload] Step 7a: Verifying photo in database...");
+        try {
+          const verifiedPhoto = await prisma.photo.findUnique({
+            where: { id: photo.id },
+          });
+          if (!verifiedPhoto) {
+            console.error(
+              "[Upload] VERIFICATION FAILED: Photo not found after create!",
+              {
+                photoId: photo.id,
+              },
+            );
+          } else {
+            console.log("[Upload] Step 7b: Verification successful:", {
+              photoId: verifiedPhoto.id,
+              eventId: verifiedPhoto.eventId,
+            });
+          }
+        } catch (verifyError) {
+          console.error("[Upload] Verification query failed:", verifyError);
         }
 
         // Process thumbnail in background
