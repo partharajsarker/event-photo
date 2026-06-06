@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import {
-  withRateLimit,
-  withRateLimitAndAuth,
-  jsonError,
-} from "@/lib/api-utils";
+import { withRateLimit, jsonError } from "@/lib/api-utils";
 import { uploadQuerySchema } from "@/lib/validation";
 import {
   generateSecureFilename,
@@ -16,7 +12,6 @@ import {
 import {
   uploadToStorage,
   buildStoragePath,
-  getPublicUrl,
   isStorageConfigured,
 } from "@/lib/storage";
 import { processThumbnail, validateImageBuffer } from "@/lib/thumbnail";
@@ -25,15 +20,22 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * GET: Not used with Supabase Storage (no presigned URLs needed)
- * Direct upload via POST is supported
+ * GET: Returns API documentation for the upload endpoint
  */
-export async function GET(request: NextRequest) {
-  return withRateLimitAndAuth(request, async () => {
-    return jsonError(
-      "Direct upload via POST is supported. Presigned URLs not available.",
-      400,
-    );
+export async function GET() {
+  return NextResponse.json({
+    endpoint: "POST /api/upload",
+    description: "Upload photos to an event",
+    usage: {
+      method: "POST",
+      url: "/api/upload?eventSlug=<event-slug>",
+      contentType: "multipart/form-data",
+      body: {
+        file: "Image file (jpg, png, webp)",
+      },
+    },
+    supportedFormats: ["jpg", "jpeg", "png", "webp"],
+    maxSizeMB: getMaxUploadBytes() / 1024 / 1024,
   });
 }
 

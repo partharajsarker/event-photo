@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -19,6 +19,8 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -143,6 +145,59 @@ export function AdminDashboard() {
       setError(err instanceof Error ? err.message : "Failed to delete photo");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUploadPhotos = async (files: FileList | null) => {
+    if (!files || !selectedEvent) return;
+
+    setUploading(true);
+    setError(null);
+    setSuccess(null);
+
+    let uploaded = 0;
+    let failed = 0;
+
+    for (const file of Array.from(files)) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch(
+          `/api/upload?eventSlug=${encodeURIComponent(selectedEvent.slug)}`,
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? "Upload failed");
+        }
+
+        uploaded++;
+      } catch (err) {
+        console.error(`Failed to upload ${file.name}:`, err);
+        failed++;
+      }
+    }
+
+    setUploading(false);
+
+    if (failed > 0) {
+      setError(`${uploaded} uploaded, ${failed} failed`);
+    } else if (uploaded > 0) {
+      setSuccess(`${uploaded} photo${uploaded > 1 ? "s" : ""} uploaded`);
+    }
+
+    // Refresh event details
+    await handleSelectEvent(selectedEvent.id);
+    await loadEvents();
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -325,6 +380,33 @@ export function AdminDashboard() {
             )}
           </div>
 
+          {/* Upload Section */}
+          <div className="mb-6 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+            <h4 className="mb-3 text-sm font-medium text-zinc-300">
+              Upload Photos
+            </h4>
+            <div className="flex flex-wrap gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                multiple
+                onChange={(e) => handleUploadPhotos(e.target.files)}
+                className="hidden"
+                id="photo-upload"
+              />
+              <label
+                htmlFor="photo-upload"
+                className="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                {uploading ? "Uploading..." : "Choose Photos"}
+              </label>
+              <p className="self-center text-xs text-zinc-500">
+                JPG, PNG, WebP · Max 50MB per file
+              </p>
+            </div>
+          </div>
+
           <h3 className="mb-3 font-medium">Photos</h3>
           {selectedEvent.photos.length === 0 ? (
             <p className="text-zinc-400">No photos uploaded yet.</p>
@@ -366,15 +448,15 @@ export function AdminDashboard() {
 
           <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
             <h4 className="mb-2 text-sm font-medium text-zinc-300">
-              Camera Upload URL
+              API Upload Endpoint
             </h4>
             <code className="block break-all text-xs text-zinc-400">
               POST {window.location.origin}/api/upload?eventSlug=
               {selectedEvent.slug}
             </code>
             <p className="mt-2 text-xs text-zinc-500">
-              Configure your camera for HTTP POST or use the presigned URL
-              endpoint for large files.
+              Use this URL for camera uploads or API integrations. Send as
+              multipart/form-data with a &quot;file&quot; field.
             </p>
           </div>
         </section>
