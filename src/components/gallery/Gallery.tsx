@@ -23,9 +23,20 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
 
   const loadingRef = useRef(false);
 
+  console.log("[Gallery] Component rendered with:", { eventSlug, eventName });
+
   const fetchPhotos = useCallback(
     async (nextCursor?: string | null) => {
       if (loadingRef.current) return;
+
+      // Validate eventSlug before making request
+      if (!eventSlug) {
+        console.error("[Gallery] eventSlug is empty/null/undefined");
+        setError("Invalid event");
+        setInitialLoading(false);
+        return;
+      }
+
       loadingRef.current = true;
       setLoading(true);
       setError(null);
@@ -39,18 +50,37 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
           params.set("cursor", nextCursor);
         }
 
-        const res = await fetch(`/api/photos?${params.toString()}`);
+        const url = `/api/photos?${params.toString()}`;
+        console.log("[Gallery] Fetching photos:", {
+          url,
+          eventSlug,
+          nextCursor,
+        });
+
+        const res = await fetch(url);
+
         if (!res.ok) {
-          throw new Error("Failed to load photos");
+          const errorData = await res.json().catch(() => ({}));
+          console.error("[Gallery] API error:", {
+            status: res.status,
+            errorData,
+          });
+          throw new Error(errorData.error ?? "Failed to load photos");
         }
 
         const data = await res.json();
+        console.log("[Gallery] Photos loaded:", {
+          count: data.photos?.length ?? 0,
+          hasMore: data.hasMore,
+        });
+
         setPhotos((prev) =>
           nextCursor ? [...prev, ...data.photos] : data.photos,
         );
         setCursor(data.nextCursor);
         setHasMore(data.hasMore);
       } catch (err) {
+        console.error("[Gallery] Fetch error:", err);
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
         loadingRef.current = false;
@@ -62,7 +92,12 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
   );
 
   useEffect(() => {
-    fetchPhotos();
+    if (eventSlug) {
+      fetchPhotos();
+    } else {
+      console.warn("[Gallery] Skipping fetch - eventSlug is empty");
+      setInitialLoading(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventSlug]);
 
@@ -107,6 +142,15 @@ export function Gallery({ eventSlug, eventName }: GalleryProps) {
       window.open(photo.originalUrl, "_blank");
     }
   };
+
+  // Show error if eventSlug is invalid
+  if (!eventSlug) {
+    return (
+      <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-6 text-center text-red-300">
+        Invalid event - please check the URL
+      </div>
+    );
+  }
 
   if (initialLoading) {
     return (

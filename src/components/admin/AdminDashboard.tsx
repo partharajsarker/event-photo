@@ -149,7 +149,33 @@ export function AdminDashboard() {
   };
 
   const handleUploadPhotos = async (files: FileList | null) => {
-    if (!files || !selectedEvent) return;
+    console.log("[Upload] handleUploadPhotos called:", {
+      filesCount: files?.length ?? 0,
+      selectedEvent,
+    });
+
+    if (!files || files.length === 0) {
+      console.warn("[Upload] No files selected");
+      return;
+    }
+
+    if (!selectedEvent) {
+      console.error("[Upload] No event selected");
+      setError("Please select an event first");
+      return;
+    }
+
+    if (!selectedEvent.slug) {
+      console.error("[Upload] Event slug is missing:", selectedEvent);
+      setError("Event slug is missing - please refresh and try again");
+      return;
+    }
+
+    const eventSlug = selectedEvent.slug;
+    console.log("[Upload] Starting upload:", {
+      eventSlug,
+      fileCount: files.length,
+    });
 
     setUploading(true);
     setError(null);
@@ -163,22 +189,31 @@ export function AdminDashboard() {
         const formData = new FormData();
         formData.append("file", file);
 
-        const res = await fetch(
-          `/api/upload?eventSlug=${encodeURIComponent(selectedEvent.slug)}`,
-          {
-            method: "POST",
-            body: formData,
-          },
-        );
+        const uploadUrl = `/api/upload?eventSlug=${encodeURIComponent(eventSlug)}`;
+        console.log("[Upload] Uploading file:", {
+          fileName: file.name,
+          uploadUrl,
+        });
+
+        const res = await fetch(uploadUrl, {
+          method: "POST",
+          body: formData,
+        });
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
+          console.error("[Upload] Server error:", { status: res.status, data });
           throw new Error(data.error ?? "Upload failed");
         }
 
+        const result = await res.json();
+        console.log("[Upload] File uploaded:", {
+          fileName: file.name,
+          photoId: result.photo?.id,
+        });
         uploaded++;
       } catch (err) {
-        console.error(`Failed to upload ${file.name}:`, err);
+        console.error(`[Upload] Failed to upload ${file.name}:`, err);
         failed++;
       }
     }
@@ -192,7 +227,9 @@ export function AdminDashboard() {
     }
 
     // Refresh event details
-    await handleSelectEvent(selectedEvent.id);
+    if (selectedEvent) {
+      await handleSelectEvent(selectedEvent.id);
+    }
     await loadEvents();
 
     // Reset file input
